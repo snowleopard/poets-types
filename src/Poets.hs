@@ -1,107 +1,76 @@
-{-# LANGUAGE TypeFamilies, Rank2Types #-}
+{-# LANGUAGE TypeFamilies, RankNTypes, FlexibleContexts #-}
 
 module Poets where
 
-import Data.Set
+class (Vertex (GraphVertex g), Edge (GraphEdge g)) => Graph g where
+    data GraphProperties g
+    data GraphVertex g
+    data GraphEdge g
+    graphProperties :: g -> GraphProperties g
+    graphVertices   :: g -> [GraphVertex g]
+    graphEdges      :: g -> [GraphEdge g]
 
--- import Control.Monad.RWS.Lazy
--- data DeviceId
+class Ord v => Vertex v where
+    type VertexProperties v
+    type VertexState v
+    type VertexInputPort v
+    type VertexOutputPort v
+    vertexProperties :: v -> VertexProperties v
+    vertexState      :: v -> VertexState v
+    setVertexState   :: VertexState v -> v -> v
+    inputPorts       :: v -> [VertexInputPort v]
+    outputPorts      :: v -> [VertexOutputPort v]
 
--- Parameters:
--- * Graph properties: graph
--- * Device properties: device
--- * Edge properties: edge
--- * Device state: deviceState
--- * Edge state: edgeState
-
-data DeviceId
-data EdgeId
-data InputPortId
-data OutputPortId
-
-class Device d where
-    type DeviceProperties d
-    type DeviceState d
-    type DeviceInputPort d
-    type DeviceOutputPort d
-    deviceId         :: d -> DeviceId
-    deviceProperties :: d -> DeviceProperties d
-    deviceState      :: d -> DeviceState d
-    setDeviceState   :: DeviceState d -> d -> d
-    inputPorts       :: Set (DeviceInputPort d)
-    outputPorts      :: Set (DeviceOutputPort d)
-
-class Edge e where
+class Ord e => Edge e where
     type EdgeProperties e
     type EdgeState e
-    edgeId         :: e -> EdgeId
+    type EdgeMessage e
     edgeProperties :: e -> EdgeProperties e
     edgeState      :: e -> EdgeState e
     setEdgeState   :: EdgeState e -> e -> e
 
-type ReceiveHandler g d e =
-       (Device d, Edge e) => g
-                          -> d
-                          -> e
-                          -> (DeviceState d, EdgeState e, [DeviceOutputPort d])
+class (Vertex (InputPortVertex i), Edge (InputPortEdge i)) => InputPort i where
+    type InputPortVertex i
+    type InputPortEdge i
+    inputPortVertex :: i -> InputPortVertex i
+    inputPortEdge   :: i -> InputPortEdge i
+    receiveHandler  :: ( InputPortVertex i ~ GraphVertex g
+                       , InputPortEdge   i ~ GraphEdge g )
+                    => i
+                    -> ReceiveHandler g m
 
--- Device type is parameterised by the types of properties (p) and state (s)
--- data Device p s = Device
---     { deviceId         :: DeviceId
---     , deviceProperties :: p
---     , deviceState      :: s
---     , deviceInputs     :: [InputPort]
---     , deviceOutputs    :: [OutputPort] }
+class (Vertex (InputPortVertex o), Edge (InputPortEdge o)) => OutputPort o where
+    type OutputPortVertex o
+    type OutputPortEdge o
+    outputPortVertex :: o -> OutputPortVertex o
+    outputPortEdge   :: o -> OutputPortEdge o
+    sendHandler      :: ( OutputPortVertex o ~ GraphVertex g
+                        , OutputPortEdge   o ~ GraphEdge g )
+                     => o
+                     -> SendHandler g m
 
--- data InputPortId
--- data OutputPortId
--- data Edge
+type ReadyToSend v = [VertexOutputPort v]
 
--- data InputPort = InputPort
---     { inputPortId :: InputPortId
---     , inputEdge   :: Edge
---     , inputDevice :: Device }
+type ReceiveHandler g m = (Graph g, Monad m)
+                        => GraphProperties g
+                        -> GraphVertex g
+                        -> GraphEdge g
+                        -> EdgeMessage (GraphEdge g)
+                        -> m ( VertexState (GraphVertex g)
+                             , EdgeState   (GraphEdge   g)
+                             , ReadyToSend (GraphVertex g) )
 
--- data OutputPort = OutputPort
---     { outputPortId :: OutputPortId
---     , outputEdge   :: Edge
---     , outputDevice :: Device }
+trivialReceiveHandler :: ReceiveHandler g m
+trivialReceiveHandler _ v e _ = return (vertexState v, edgeState e, [])
 
--- -- data Port a where
--- --     InputPort ::
--- -- data OutputPort
--- data RTS
+type SendHandler g m = (Graph g, Monad m)
+                     => GraphProperties g
+                     -> GraphVertex g
+                     -> GraphEdge g
+                     -> m ( Maybe (EdgeMessage (GraphEdge g))
+                          , VertexState (GraphVertex g)
+                          , EdgeState   (GraphEdge   g)
+                          , ReadyToSend (GraphVertex g) )
 
--- -- * g -- graph properties
--- -- * d -- device properties
--- -- * s -- device state
--- -- * e --
--- -- type ReceiveHandler = Graph gp -> Device dp ds do -> Edge ep es -> (ds, es, [do])
-
--- -- data Edge s p
-
--- -- data Pin = Pin
--- --     { deviceId :: DeviceId
--- --     , edgeId   :: EdgeId }
-
-
--- -- An event is a message that arrived via an edge.
--- data Event e a = Event
---     { edge    :: e
---     , message :: a }
-
--- data GraphProperties
--- data VertexProperties
--- data EdgeProperties
-
--- data Context = Context
---     { graphProperties  :: GraphProperties
---     , vertexProperties :: VertexProperties
---     , edgeProperties   :: EdgeProperties }
-
--- data State
--- data Log
-
--- type VertexComputation m a = RWST Context Log State m a
-
--- type EventHandler m a = Event -> VertexComputation m a
+trivialSendHandler :: SendHandler g m
+trivialSendHandler _ v e = return (Nothing, vertexState v, edgeState e, [])

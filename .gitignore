@@ -1,3 +1,5 @@
+.ghci
+ghcid.txt
 dist
 dist-*
 cabal-dev
