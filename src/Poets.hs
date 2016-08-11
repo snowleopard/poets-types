@@ -2,62 +2,64 @@
 
 module Poets where
 
--- All data types are parameterised by g: the type of the application graph.
+-- Generic type families for properties and states of vertices, edges, etc.
+-- TODO: Maybe change to data families?
+type family Properties a
+type family State a
 
-type family Properties g
-type family State g
+-- All data types are parameterised by a: the application type.
+data Graph a = Graph
+    { graphProperties :: Properties (Graph a)
+    , graphVertices   :: [Vertex a]
+    , graphEdges      :: [Edge a] }
 
-data Graph g = Graph
-    { graphProperties :: Properties g
-    , graphVertices   :: [Vertex g]
-    , graphEdges      :: [Edge g] }
+data Vertex a = Vertex
+    { vertexProperties :: Properties (Vertex a)
+    , vertexState      :: State (Vertex a)
+    , inputPorts       :: [InputPort a]
+    , outputPorts      :: [OutputPort a] }
 
-data Vertex g = Vertex
-    { vertexProperties :: Properties (Vertex g)
-    , vertexState      :: State (Vertex g)
-    , inputPorts       :: [InputPort (Vertex g)]
-    , outputPorts      :: [OutputPort (Vertex g)] }
-
-updateVertexState :: State (Vertex g) -> Vertex g -> Vertex g
+updateVertexState :: State (Vertex a) -> Vertex a -> Vertex a
 updateVertexState s (Vertex p _ is os) = Vertex p s is os
 
-data Edge g = Edge
-    { edgeProperties :: Properties (Edge g)
-    , edgeState      :: State (Edge g) }
+data Edge a = Edge
+    { edgeProperties :: Properties (Edge a)
+    , edgeState      :: State (Edge a) }
 
-updateEdgeState :: State (Edge g) -> Edge g -> Edge g
+updateEdgeState :: State (Edge a) -> Edge a -> Edge a
 updateEdgeState s (Edge p _) = Edge p s
 
-data InputPort g = InputPort
-    { inputPortVertex :: Vertex g
-    , inputPortEdge   :: Edge g
-    , receiveHandler  :: ReceiveHandler g }
+data InputPort a = InputPort
+    { inputPortVertex :: Vertex a
+    , inputPortEdge   :: Edge a }
 
-data OutputPort g = OutputPort
-    { outputPortVertex :: Vertex g
-    , outputPortEdge   :: Edge g
-    , sendHandler      :: SendHandler g }
+data OutputPort a = OutputPort
+    { outputPortVertex :: Vertex a
+    , outputPortEdge   :: Edge a }
 
-type ReceiveHandler g = Properties g
-                     -> Vertex g
-                     -> Edge g
-                     ->   ( State (Vertex g)
-                          , State (Edge g)
-                          , [InputPort (Vertex g)] )
+type ReceiveHandler a m = Monad m => Properties (Graph a)
+                                  -> InputPort a
+                                  -> m ( State (Vertex a)
+                                       , State (Edge a)
+                                       , [OutputPort a] )
 
-trivialReceiveHandler :: ReceiveHandler g
-trivialReceiveHandler _ v e = (vertexState v, edgeState e, [])
+trivialReceiveHandler :: ReceiveHandler a m
+trivialReceiveHandler _ i = return ( vertexState (inputPortVertex i)
+                                   , edgeState   (inputPortEdge   i)
+                                   , [] )
 
-type SendHandler g = Properties g
-                   -> Vertex g
-                   -> Edge g
-                   ->   ( Maybe Bool
-                        , State (Vertex g)
-                        , State (Edge   g)
-                        , [InputPort (Vertex g)] )
+type SendHandler a m = Monad m => Properties a
+                               -> OutputPort a
+                               -> m ( Maybe Bool
+                                    , State (Vertex a)
+                                    , State (Edge   a)
+                                    , [OutputPort a] )
 
-trivialSendHandler :: SendHandler g
-trivialSendHandler _ v e = (Nothing, vertexState v, edgeState e, [])
+trivialSendHandler :: SendHandler a m
+trivialSendHandler _ o = return ( Nothing
+                                , vertexState (outputPortVertex o)
+                                , edgeState   (outputPortEdge   o)
+                                , [] )
 
 
 
