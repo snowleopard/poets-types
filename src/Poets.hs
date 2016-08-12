@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, RankNTypes, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies, RankNTypes #-}
 
 module Poets where
 
@@ -11,51 +11,56 @@ type family State a
 data Graph a = Graph
     { graphProperties :: Properties (Graph a)
     , graphVertices   :: [Vertex a]
-    , graphEdges      :: [Edge a] }
+    , graphEdges      :: forall t. [Edge a t] }
 
 data Vertex a = Vertex
     { vertexProperties :: Properties (Vertex a)
-    , vertexState      :: State (Vertex a)
-    , inputPorts       :: [InputPort a]
-    , outputPorts      :: [OutputPort a] }
+    , vertexState      :: State      (Vertex a)
+    , inputPorts       :: forall t. [InputPort a t]
+    , outputPorts      :: forall t. [OutputPort a t] }
 
 updateVertexState :: State (Vertex a) -> Vertex a -> Vertex a
 updateVertexState s (Vertex p _ is os) = Vertex p s is os
 
-data Edge a = Edge
-    { edgeProperties :: Properties (Edge a)
-    , edgeState      :: State (Edge a) }
+-- Edges are parameterised by phantom edge type t
+data Edge a t = Edge
+    { edgeProperties :: Properties (Edge a t)
+    , edgeState      :: State      (Edge a t) }
 
-updateEdgeState :: State (Edge a) -> Edge a -> Edge a
+-- Edges of type t accept messages of type Message t
+type family Message t
+
+updateEdgeState :: State (Edge a t) -> Edge a t -> Edge a t
 updateEdgeState s (Edge p _) = Edge p s
 
-data InputPort a = InputPort
+data InputPort a t = InputPort
     { inputPortVertex :: Vertex a
-    , inputPortEdge   :: Edge a }
+    , inputPortEdge   :: Edge a t }
 
-data OutputPort a = OutputPort
+data OutputPort a t = OutputPort
     { outputPortVertex :: Vertex a
-    , outputPortEdge   :: Edge a }
+    , outputPortEdge   :: Edge a t }
 
-type ReceiveHandler a m = Monad m => Properties (Graph a)
-                                  -> InputPort a
-                                  -> m ( State (Vertex a)
-                                       , State (Edge a)
-                                       , [OutputPort a] )
+type ReceiveHandler a t m = Monad m => Properties (Graph a)
+                                    -> InputPort a t
+                                    -> Message t
+                                    -> m ( State (Vertex a)
+                                         , State (Edge a t)
+                                         , [OutputPort a t] )
 
-trivialReceiveHandler :: ReceiveHandler a m
-trivialReceiveHandler _ i = return ( vertexState (inputPortVertex i)
-                                   , edgeState   (inputPortEdge   i)
-                                   , [] )
+trivialReceiveHandler :: ReceiveHandler a t m
+trivialReceiveHandler _ i _ = return ( vertexState (inputPortVertex i)
+                                     , edgeState   (inputPortEdge   i)
+                                     , [] )
 
-type SendHandler a m = Monad m => Properties a
-                               -> OutputPort a
-                               -> m ( Maybe Bool
-                                    , State (Vertex a)
-                                    , State (Edge   a)
-                                    , [OutputPort a] )
+type SendHandler a t m = Monad m => Properties a
+                                 -> OutputPort a t
+                                 -> m ( Maybe (Message t)
+                                      , State (Vertex a)
+                                      , State (Edge   a t)
+                                      , [OutputPort a t] )
 
-trivialSendHandler :: SendHandler a m
+trivialSendHandler :: SendHandler a t m
 trivialSendHandler _ o = return ( Nothing
                                 , vertexState (outputPortVertex o)
                                 , edgeState   (outputPortEdge   o)
