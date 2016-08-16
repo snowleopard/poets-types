@@ -4,25 +4,6 @@ module Poets where
 
 --import Control.Monad.State.Lazy
 
--- class Poets l s a where
---     getLabel :: Poets l s l
---     getState :: Poets l s s
---     setState :: s -> Poets l s ()
-
--- Orchestrator needs to set local st
--- s ~ (VertexState, EdgeState)
--- o ~ (Vertex, Edge t)
-
--- type ReceiveHandler t o s m = MonadState s m => t -> m [o]
-
--- type SendHandler t o s m = MonadState s m => m (Maybe t, [o])
-
--- trivialReceiveHandler :: ReceiveHandler t o s m
--- trivialReceiveHandler _ = return []
-
--- trivialSendHandler :: SendHandler t o s m
--- trivialSendHandler = return (Nothing, [])
-
 -- orchestrate :: Monad m
 --             => graphProperties
 --             -> [Vertex]
@@ -34,53 +15,73 @@ module Poets where
 -- Orchestrator orchestrates events:
 --data Event p = Receive (Input p) p | Send (Output p) p
 
-data Vertex = Vertex String
+-- Make invalid graphs non-representable:
+-- * A port belongs to exactly one vertex
+-- * An edge connects input and output ports of the same type
+-- * An input port has exactly one source
 
--- data Input p = Input (InputState p) Vertex
+-- Examples that don't work:
+-- * Vertex lists ports: same port belongs to different vertices
+-- * Circular parent/children links (can be inconsistent)
+-- * Edge list can assign multiple sources to an input port
 
-data Output p
+data Vertex = Vertex
+    { vLabel :: String
+    , vState :: Int }
+
+-- City/ports analogy:
+
+newcastle :: Vertex
+newcastle = Vertex "Newcastle" 0
+
+london :: Vertex
+london = Vertex "London" 0
+
+southampton :: Vertex
+southampton = Vertex "Southampton" 0
+
+data Air
+data Train
+data Sea
+
 type family InputState p
-data OutputState p
+type family OutputState p
+type family Packet p
 
-data Receive p = Receive (Input  p) p
-data Send    p = Send    (Output p) p
+type instance InputState  Train = Int
+type instance OutputState Train = Int
+type instance Packet      Train = Int
+
+type instance InputState  Air = String
+type instance OutputState Air = String
+type instance Packet      Air = String
+
+data Input p where
+    TrainInput :: InputState Train -> Vertex -> Input Train
+    AirInput   :: InputState Air   -> Vertex -> Input Air
+
+data Output p where
+    TrainOutput :: OutputState Train -> Vertex -> Output Train
+    AirOutput   :: OutputState Air   -> Vertex -> Output Air
+
+kgxCross :: AbstractInput
+kgxCross = AbstractInput $ TrainInput 0 london
+
+nclAir :: AbstractOutput
+nclAir = AbstractOutput $ AirOutput "open" newcastle
+
+data AbstractInput where
+    AbstractInput :: Input p -> AbstractInput
 
 data AbstractOutput where
     AbstractOutput :: Output p -> AbstractOutput
 
 type RTS = [AbstractOutput]
 
-type ReceiveHandler p m = Input p -> p -> m (InputState p, RTS)
+type ReceiveHandler p m = Input p -> Packet p -> m (InputState p, RTS)
 
-type SendHandler p m = Output p -> m (Maybe p, OutputState p, RTS)
-
-
--- City/ports analogy:
-
-newcastle :: Vertex
-newcastle = Vertex "Newcastle"
-
-london :: Vertex
-london = Vertex "London"
-
-southampton :: Vertex
-southampton = Vertex "Southampton"
-
-data Airport
-data TrainStation
-data Seaport
-
-type instance InputState TrainStation = Int
-type instance InputState Airport      = String
-
--- Add Output p as a source field of Input p
-data Input p where
-    TrainInput   :: InputState TrainStation -> Vertex -> Input TrainStation
-    AirportInput :: InputState Airport      -> Vertex -> Input Airport
-
-kgxCross :: Input TrainStation
-kgxCross = TrainInput 0 london
+type SendHandler p m = Output p -> m (Maybe (Packet p), OutputState p, RTS)
 
 test :: Monad m => ReceiveHandler p m
-test (TrainInput   s v) packet = return (s + 1, [])
-test (AirportInput s v) packet = return (s ++ "!", [])
+test (TrainInput s v) packet = return (s + packet + vState v, [])
+test (AirInput s v) packet = return (s ++ packet ++ vLabel v, [])
