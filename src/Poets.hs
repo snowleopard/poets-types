@@ -4,17 +4,6 @@ module Poets where
 
 --import Control.Monad.State.Lazy
 
--- orchestrate :: Monad m
---             => graphProperties
---             -> [Vertex]
---             ->
---             ->
-
--- orchestrate = undefined
-
--- Orchestrator orchestrates events:
---data Event p = Receive (Input p) p | Send (Output p) p
-
 -- Make invalid graphs non-representable:
 -- * A port belongs to exactly one vertex
 -- * An edge connects input and output ports of the same type
@@ -57,18 +46,21 @@ type instance OutputState Air = String
 type instance Packet      Air = String
 
 data Input p where
-    TrainInput :: InputState Train -> Vertex -> Input Train
-    AirInput   :: InputState Air   -> Vertex -> Input Air
+    TrainInput :: InputState Train -> Output Train -> Vertex -> Input Train
+    AirInput   :: InputState Air   -> Output Air   -> Vertex -> Input Air
 
 data Output p where
     TrainOutput :: OutputState Train -> Vertex -> Output Train
     AirOutput   :: OutputState Air   -> Vertex -> Output Air
 
-kgxCross :: AbstractInput
-kgxCross = AbstractInput $ TrainInput 0 london
+kgxCross :: Input Train
+kgxCross = TrainInput 0 nclCentral london
 
-nclAir :: AbstractOutput
-nclAir = AbstractOutput $ AirOutput "open" newcastle
+nclCentral :: Output Train
+nclCentral = TrainOutput 0 newcastle
+
+nclAir :: Output Air
+nclAir = AirOutput "open" newcastle
 
 data AbstractInput where
     AbstractInput :: Input p -> AbstractInput
@@ -78,10 +70,34 @@ data AbstractOutput where
 
 type RTS = [AbstractOutput]
 
-type ReceiveHandler p m = Input p -> Packet p -> m (InputState p, RTS)
+type ReceiveHandler m = forall p. Input p -> Packet p -> m (InputState p, RTS)
 
-type SendHandler p m = Output p -> m (Maybe (Packet p), OutputState p, RTS)
+type SendHandler m = forall p. Output p -> m (Maybe (Packet p), OutputState p, RTS)
 
-test :: Monad m => ReceiveHandler p m
-test (TrainInput s v) packet = return (s + packet + vState v, [])
-test (AirInput s v) packet = return (s ++ packet ++ vLabel v, [])
+receive :: Monad m => ReceiveHandler m
+receive (TrainInput s _ v) packet = return (s + packet + vState v, [])
+receive (AirInput   s _ v) packet = return (s ++ packet ++ vLabel v, [])
+
+send :: Monad m => SendHandler m
+send (TrainOutput s v) = return (Just 8, s + vState v, [])
+send (AirOutput   s v) = return (Just "Hi", s ++ vLabel v, [])
+
+data Event where
+    InputEvent  :: Input  p -> Packet p -> Event
+    OutputEvent :: Output p -> Event
+
+type Topology = forall p. Output p -> [Input p]
+
+go :: Monad m => ReceiveHandler m -> SendHandler m -> Topology -> Event -> m [Event]
+go r _ _ (InputEvent  i packet) = do _ <- r i packet
+                                     return []
+go _ s t (OutputEvent o) = do (maybePacket, _, _) <- s o
+                              return $ case maybePacket of
+                                  Nothing     -> []
+                                  Just packet -> [ InputEvent i packet | i <- t o ]
+
+orchestrate :: Monad m
+            => [AbstractInput] -> Int
+            -> m ()
+orchestrate = undefined
+
