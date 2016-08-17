@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, RankNTypes, GADTs #-}
+{-# LANGUAGE TypeFamilies, RankNTypes, GADTs, FlexibleInstances #-}
 
 module Poets where
 
@@ -46,21 +46,29 @@ type instance OutputState Air = String
 type instance Packet      Air = String
 
 data Input p where
-    TrainInput :: InputState Train -> Output Train -> Vertex -> Input Train
-    AirInput   :: InputState Air   -> Output Air   -> Vertex -> Input Air
+    TrainInput :: InputState Train -> Vertex -> Input Train
+    AirInput   :: InputState Air   -> Vertex -> Input Air
+    -- TrainInput :: InputState Train -> Output Train -> Vertex -> Input Train
+    -- AirInput   :: InputState Air   -> Output Air   -> Vertex -> Input Air
+
+-- inputPreset :: Input p -> Output p
+-- inputPreset
 
 data Output p where
     TrainOutput :: OutputState Train -> Vertex -> Output Train
     AirOutput   :: OutputState Air   -> Vertex -> Output Air
 
 kgxCross :: Input Train
-kgxCross = TrainInput 0 nclCentral london
+kgxCross = TrainInput 0 london
 
 nclCentral :: Output Train
 nclCentral = TrainOutput 0 newcastle
 
-nclAir :: Output Air
-nclAir = AirOutput "open" newcastle
+nclAirport :: Output Air
+nclAirport = AirOutput "toon" newcastle
+
+southamptonAirport :: Input Air
+southamptonAirport = AirInput "city" southampton
 
 data AbstractInput where
     AbstractInput :: Input p -> AbstractInput
@@ -75,8 +83,8 @@ type ReceiveHandler m = forall p. Input p -> Packet p -> m (InputState p, RTS)
 type SendHandler m = forall p. Output p -> m (Maybe (Packet p), OutputState p, RTS)
 
 receive :: Monad m => ReceiveHandler m
-receive (TrainInput s _ v) packet = return (s + packet + vState v, [])
-receive (AirInput   s _ v) packet = return (s ++ packet ++ vLabel v, [])
+receive (TrainInput s v) packet = return (s + packet + vState v, [])
+receive (AirInput   s v) packet = return (s ++ packet ++ vLabel v, [])
 
 send :: Monad m => SendHandler m
 send (TrainOutput s v) = return (Just 8, s + vState v, [])
@@ -96,8 +104,33 @@ go _ s t (OutputEvent o) = do (maybePacket, _, _) <- s o
                                   Nothing     -> []
                                   Just packet -> [ InputEvent i packet | i <- t o ]
 
-orchestrate :: Monad m
-            => [AbstractInput] -> Int
-            -> m ()
-orchestrate = undefined
+data Edge where
+    Edge :: Output p -> [Packet p] -> Input p -> Edge
 
+edges :: [Edge]
+edges = [ Edge nclCentral [1, 2, 3] kgxCross
+        , Edge nclAirport ["plane"] southamptonAirport ]
+
+test :: Monad m => m ()
+test = orchestrate edges 10
+
+orchestrate :: Monad m => [Edge] -> Int -> m ()
+orchestrate es n
+    | n <= 0    = return ()
+    | otherwise = orchestrate es (n - 1)
+
+data Graph = Graph
+    { vertices :: [Vertex]
+    , inputs   :: [AbstractInput]
+    , outputs  :: [AbstractOutput]
+    , preset   :: AbstractInput  -> AbstractOutput
+    , postset  :: AbstractOutput -> [AbstractInput] }
+
+buildGraph :: [Edge] -> Graph
+buildGraph es = Graph vs is os pre post
+  where
+    is   = undefined -- map (\(Edge i _) -> AbstractInput i) es
+    os   = undefined -- map (\AbstractInput i -> AbstractOutput $ )
+    vs   = undefined
+    pre  = undefined
+    post = undefined
