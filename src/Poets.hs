@@ -1,7 +1,9 @@
-{-# LANGUAGE TypeFamilies, RankNTypes, GADTs, FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies, RankNTypes, GADTs, FlexibleContexts #-}
 
 module Poets where
 
+import Data.List.Extra
+import qualified Data.Map
 --import Control.Monad.State.Lazy
 
 -- Make invalid graphs non-representable:
@@ -46,20 +48,27 @@ type instance OutputState Air = String
 type instance Packet      Air = String
 
 data Input p where
-    TrainInput :: InputState Train -> Vertex -> Input Train
-    AirInput   :: InputState Air   -> Vertex -> Input Air
-    -- TrainInput :: InputState Train -> Output Train -> Vertex -> Input Train
-    -- AirInput   :: InputState Air   -> Output Air   -> Vertex -> Input Air
+    TrainInput :: InputState Train -> Output Train -> Vertex -> Input Train
+    AirInput   :: InputState Air   -> Output Air   -> Vertex -> Input Air
 
--- inputPreset :: Input p -> Output p
--- inputPreset
+inputPreset :: Input p -> Output p
+inputPreset (TrainInput _ o _) = o
+inputPreset (AirInput   _ o _) = o
+
+inputVertex :: Input p -> Vertex
+inputVertex (TrainInput _ _ v) = v
+inputVertex (AirInput   _ _ v) = v
 
 data Output p where
     TrainOutput :: OutputState Train -> Vertex -> Output Train
     AirOutput   :: OutputState Air   -> Vertex -> Output Air
 
+outputVertex :: Output p -> Vertex
+outputVertex (TrainOutput _ v) = v
+outputVertex (AirOutput   _ v) = v
+
 kgxCross :: Input Train
-kgxCross = TrainInput 0 london
+kgxCross = TrainInput 0 nclCentral london
 
 nclCentral :: Output Train
 nclCentral = TrainOutput 0 newcastle
@@ -68,7 +77,7 @@ nclAirport :: Output Air
 nclAirport = AirOutput "toon" newcastle
 
 southamptonAirport :: Input Air
-southamptonAirport = AirInput "city" southampton
+southamptonAirport = AirInput "city" nclAirport southampton
 
 data AbstractInput where
     AbstractInput :: Input p -> AbstractInput
@@ -83,8 +92,8 @@ type ReceiveHandler m = forall p. Input p -> Packet p -> m (InputState p, RTS)
 type SendHandler m = forall p. Output p -> m (Maybe (Packet p), OutputState p, RTS)
 
 receive :: Monad m => ReceiveHandler m
-receive (TrainInput s v) packet = return (s + packet + vState v, [])
-receive (AirInput   s v) packet = return (s ++ packet ++ vLabel v, [])
+receive (TrainInput s _ v) packet = return (s + packet + vState v, [])
+receive (AirInput   s _ v) packet = return (s ++ packet ++ vLabel v, [])
 
 send :: Monad m => SendHandler m
 send (TrainOutput s v) = return (Just 8, s + vState v, [])
@@ -126,11 +135,21 @@ data Graph = Graph
     , preset   :: AbstractInput  -> AbstractOutput
     , postset  :: AbstractOutput -> [AbstractInput] }
 
-buildGraph :: [Edge] -> Graph
-buildGraph es = Graph vs is os pre post
+buildGraph :: Ord AbstractOutput => [AbstractInput] -> Graph
+buildGraph is = Graph vs is os pre post
   where
-    is   = undefined -- map (\(Edge i _) -> AbstractInput i) es
-    os   = undefined -- map (\AbstractInput i -> AbstractOutput $ )
-    vs   = undefined
-    pre  = undefined
-    post = undefined
+    os   = map pre is
+    vs   = map (\(AbstractInput  i) -> inputVertex i) is
+        ++ map (\(AbstractOutput o) -> outputVertex o) os
+    pre  = \(AbstractInput i) -> AbstractOutput (inputPreset i)
+    post o = Data.Map.findWithDefault [] o $ Data.Map.fromAscList dict
+    dict = groupSort [ (pre i, i) | i <- is ]
+
+-- Connectivity:
+-- Input -> Output
+-- Input -> Vertex
+-- Output -> Vertex
+--
+-- inverse:
+-- Vertex -> ([Input], [Output])
+-- Output -> [Input]
