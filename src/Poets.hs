@@ -47,49 +47,49 @@ type instance InputState  Air = String
 type instance OutputState Air = String
 type instance Packet      Air = String
 
-data Input p where
-    TrainInput :: InputState Train -> Output Train -> Vertex -> Input Train
-    AirInput   :: InputState Air   -> Output Air   -> Vertex -> Input Air
+data TInput p where
+    TrainInput :: InputState Train -> TOutput Train -> Vertex -> TInput Train
+    AirInput   :: InputState Air   -> TOutput Air   -> Vertex -> TInput Air
 
-inputPreset :: Input p -> Output p
+inputPreset :: TInput p -> TOutput p
 inputPreset (TrainInput _ o _) = o
 inputPreset (AirInput   _ o _) = o
 
-inputVertex :: Input p -> Vertex
+inputVertex :: TInput p -> Vertex
 inputVertex (TrainInput _ _ v) = v
 inputVertex (AirInput   _ _ v) = v
 
-data Output p where
-    TrainOutput :: OutputState Train -> Vertex -> Output Train
-    AirOutput   :: OutputState Air   -> Vertex -> Output Air
+data TOutput p where
+    TrainOutput :: OutputState Train -> Vertex -> TOutput Train
+    AirOutput   :: OutputState Air   -> Vertex -> TOutput Air
 
-outputVertex :: Output p -> Vertex
+outputVertex :: TOutput p -> Vertex
 outputVertex (TrainOutput _ v) = v
 outputVertex (AirOutput   _ v) = v
 
-kgxCross :: Input Train
+kgxCross :: TInput Train
 kgxCross = TrainInput 0 nclCentral london
 
-nclCentral :: Output Train
+nclCentral :: TOutput Train
 nclCentral = TrainOutput 0 newcastle
 
-nclAirport :: Output Air
+nclAirport :: TOutput Air
 nclAirport = AirOutput "toon" newcastle
 
-southamptonAirport :: Input Air
+southamptonAirport :: TInput Air
 southamptonAirport = AirInput "city" nclAirport southampton
 
-data AbstractInput where
-    AbstractInput :: Input p -> AbstractInput
+data Input where
+    Input :: TInput p -> Input
 
-data AbstractOutput where
-    AbstractOutput :: Output p -> AbstractOutput
+data Output where
+    Output :: TOutput p -> Output
 
-type RTS = [AbstractOutput]
+type RTS = [Output]
 
-type ReceiveHandler m = forall p. Input p -> Packet p -> m (InputState p, RTS)
+type ReceiveHandler m = forall p. TInput p -> Packet p -> m (InputState p, RTS)
 
-type SendHandler m = forall p. Output p -> m (Maybe (Packet p), OutputState p, RTS)
+type SendHandler m = forall p. TOutput p -> m (Maybe (Packet p), OutputState p, RTS)
 
 receive :: Monad m => ReceiveHandler m
 receive (TrainInput s _ v) packet = return (s + packet + vState v, [])
@@ -99,57 +99,75 @@ send :: Monad m => SendHandler m
 send (TrainOutput s v) = return (Just 8, s + vState v, [])
 send (AirOutput   s v) = return (Just "Hi", s ++ vLabel v, [])
 
+-- data InputEvent where
+--     InputEvent :: TInput  p -> Packet p -> Event
+
+-- data OutputEvent where
+--     OutputEvent :: TInput  p -> Packet p -> Event
+
 data Event where
-    InputEvent  :: Input  p -> Packet p -> Event
-    OutputEvent :: Output p -> Event
+    InputEvent  :: TInput  p -> Packet p -> Event
+    OutputEvent :: TOutput p -> Event
 
-type Topology = forall p. Output p -> [Input p]
+type Topology = forall p. TOutput p -> [TInput p]
 
-go :: Monad m => ReceiveHandler m -> SendHandler m -> Topology -> Event -> m [Event]
-go r _ _ (InputEvent  i packet) = do _ <- r i packet
-                                     return []
-go _ s t (OutputEvent o) = do (maybePacket, _, _) <- s o
-                              return $ case maybePacket of
-                                  Nothing     -> []
-                                  Just packet -> [ InputEvent i packet | i <- t o ]
+handle :: Monad m => ReceiveHandler m -> SendHandler m -> Topology -> Event -> m [Event]
+handle r _ _ (InputEvent  i packet) = do _ <- r i packet
+                                         return []
+handle _ s t (OutputEvent o) = do (maybePacket, _, _) <- s o
+                                  return $ case maybePacket of
+                                      Nothing     -> []
+                                      Just packet -> [ InputEvent i packet | i <- t o ]
 
 data Edge where
-    Edge :: Output p -> [Packet p] -> Input p -> Edge
+    Edge :: TOutput p -> [TInput p] -> Edge
 
-edges :: [Edge]
-edges = [ Edge nclCentral [1, 2, 3] kgxCross
-        , Edge nclAirport ["plane"] southamptonAirport ]
+-- edges :: [Edge]
+-- edges = [ Edge nclCentral [1, 2, 3] kgxCross
+--         , Edge nclAirport ["plane"] southamptonAirport ]
 
-test :: Monad m => m ()
-test = orchestrate edges 10
+-- test :: Monad m => m ()
+-- test = orchestrate edges 10
 
-orchestrate :: Monad m => [Edge] -> Int -> m ()
-orchestrate es n
-    | n <= 0    = return ()
-    | otherwise = orchestrate es (n - 1)
+-- orchestrate :: Monad m => [Edge] -> Int -> m ()
+-- orchestrate es n
+--     | n <= 0    = return ()
+--     | otherwise = orchestrate es (n - 1)
 
 data Graph = Graph
     { vertices :: [Vertex]
-    , inputs   :: [AbstractInput]
-    , outputs  :: [AbstractOutput]
-    , preset   :: AbstractInput  -> AbstractOutput
-    , postset  :: AbstractOutput -> [AbstractInput] }
+    , inputs   :: [Input]
+    , outputs  :: [Output]
+    , preset   :: Input  -> Output
+    , postset  :: Output -> [Input] }
 
-buildGraph :: Ord AbstractOutput => [AbstractInput] -> Graph
+buildGraph :: Ord Output => [Input] -> Graph
 buildGraph is = Graph vs is os pre post
   where
     os   = map pre is
-    vs   = map (\(AbstractInput  i) -> inputVertex i) is
-        ++ map (\(AbstractOutput o) -> outputVertex o) os
-    pre  = \(AbstractInput i) -> AbstractOutput (inputPreset i)
+    vs   = map (\(Input  i) -> inputVertex i) is
+        ++ map (\(Output o) -> outputVertex o) os
+    pre  = \(Input i) -> Output (inputPreset i)
     post o = Data.Map.findWithDefault [] o $ Data.Map.fromAscList dict
     dict = groupSort [ (pre i, i) | i <- is ]
 
+type EventPool = [Event]
+
+strategy :: EventPool -> Maybe (Event, EventPool)
+strategy = undefined
+
+step :: Monad m => EventPool -> ReceiveHandler m -> SendHandler m -> Topology -> m (Maybe EventPool)
+step pool r s t = case strategy pool of
+    Nothing        -> return Nothing
+    Just (e, rest) -> do
+        new <- handle r s t e
+        return . Just $ rest ++ new
+
 -- Connectivity:
--- Input -> Output
--- Input -> Vertex
--- Output -> Vertex
+-- TInput -> TOutput
+-- TInput -> Vertex
+-- TOutput -> Vertex
 --
 -- inverse:
--- Vertex -> ([Input], [Output])
--- Output -> [Input]
+-- Vertex -> ([TInput], [TOutput])
+-- TOutput -> [TInput]

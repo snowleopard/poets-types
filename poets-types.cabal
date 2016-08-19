@@ -16,7 +16,8 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Poets
-  build-depends:       base >= 4.7 && < 5
+  build-depends:       array >= 0.5.1
+                     , base >= 4.7 && < 5
                      , containers >= 0.5.6
                      , extra >= 1.4.10
   ghc-options:         -Wall -Werror
