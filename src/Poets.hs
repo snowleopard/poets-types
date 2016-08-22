@@ -6,6 +6,11 @@ import Data.List.Extra
 import qualified Data.Map
 --import Control.Monad.State.Lazy
 
+-- Discuss:
+-- * Safe graph spec
+-- * Make RTS part of vertex state
+-- * Delays, time-dependent ready-to-send
+
 -- Make invalid graphs non-representable:
 -- * A port belongs to exactly one vertex
 -- * An edge connects input and output ports of the same type
@@ -35,49 +40,38 @@ data Air
 data Train
 data Sea
 
-type family InputState p
-type family OutputState p
+-- type family InputState p
+-- type family OutputState p
 type family Packet p
 
-type instance InputState  Train = Int
-type instance OutputState Train = Int
+-- type instance InputState  Train = Int
+-- type instance OutputState Train = Int
 type instance Packet      Train = Int
 
-type instance InputState  Air = String
-type instance OutputState Air = String
+-- type instance InputState  Air = String
+-- type instance OutputState Air = String
 type instance Packet      Air = String
 
 data TInput p where
-    TrainInput :: InputState Train -> TOutput Train -> Vertex -> TInput Train
-    AirInput   :: InputState Air   -> TOutput Air   -> Vertex -> TInput Air
-
-inputPreset :: TInput p -> TOutput p
-inputPreset (TrainInput _ o _) = o
-inputPreset (AirInput   _ o _) = o
-
-inputVertex :: TInput p -> Vertex
-inputVertex (TrainInput _ _ v) = v
-inputVertex (AirInput   _ _ v) = v
+    TInput :: { iState  :: State (TInput p)
+              , iSource :: TOutput p
+              , iVertex :: Vertex } -> TInput p
 
 data TOutput p where
-    TrainOutput :: OutputState Train -> Vertex -> TOutput Train
-    AirOutput   :: OutputState Air   -> Vertex -> TOutput Air
-
-outputVertex :: TOutput p -> Vertex
-outputVertex (TrainOutput _ v) = v
-outputVertex (AirOutput   _ v) = v
+    TOutput :: { oState  :: State (TOutput p)
+               , oVertex :: Vertex } -> TOutput p
 
 kgxCross :: TInput Train
-kgxCross = TrainInput 0 nclCentral london
+kgxCross = TInput 0 nclCentral london
 
 nclCentral :: TOutput Train
-nclCentral = TrainOutput 0 newcastle
+nclCentral = TOutput 0 newcastle
 
 nclAirport :: TOutput Air
-nclAirport = AirOutput "toon" newcastle
+nclAirport = TOutput (SOA "toon") newcastle
 
 southamptonAirport :: TInput Air
-southamptonAirport = AirInput "city" nclAirport southampton
+southamptonAirport = TInput (SIA "city") nclAirport southampton
 
 data Input where
     Input :: TInput p -> Input
@@ -85,19 +79,68 @@ data Input where
 data Output where
     Output :: TOutput p -> Output
 
-type RTS = [Output]
+-- data Graph v i o = Graph
+--     { gInputs       :: [forall p. i p]
+--     , gSource       :: forall p. i p -> o p
+--     , gInputVertex  :: forall p. i p -> v
+--     , gOutputVertex :: forall p. o p -> v }
 
-type ReceiveHandler m = forall p. TInput p -> Packet p -> m (InputState p, RTS)
+-- data GraphState v i o = GraphState
+--     { gvState :: v -> State v
+--     , giState :: forall p. i p -> State (i p)
+--     , goState :: forall p. o p -> State (o p) }
 
-type SendHandler m = forall p. TOutput p -> m (Maybe (Packet p), OutputState p, RTS)
+data family State a
 
-receive :: Monad m => ReceiveHandler m
-receive (TrainInput s _ v) packet = return (s + packet + vState v, [])
-receive (AirInput   s _ v) packet = return (s ++ packet ++ vLabel v, [])
+data instance State (TInput Train) = SIT { fromSIT :: Int }
+data instance State (TInput Air)   = SIA String
+data instance State (TOutput Train) = SOT Int
+data instance State (TOutput Air)   = SOA String
 
-send :: Monad m => SendHandler m
+-- data Event i where
+--     Event :: i -> p -> Event i
+
+receive :: Monad m => Receive m
+receive (TInput s o v)
+-- receive (TrainInput s _ v) packet = return (SIT $ fromSIT s + packet + vState v, vState v)
+-- receive (AirInput   s _ v) packet = return (s ++ packet ++ vLabel v, vState v)
+
+send :: Monad m => Send m
 send (TrainOutput s v) = return (Just 8, s + vState v, [])
 send (AirOutput   s v) = return (Just "Hi", s ++ vLabel v, [])
+
+-- Events:
+-- Input receives a packet: i -> p -> m (State i, State v)
+-- Output sends a packet, creating new events: o -> m (Maybe p, State o, State v)
+-- Enabled outputs -- part of a vertex state
+
+type Receive m v i = forall p. i p -> p -> m (State (i p), State v)
+
+type Send m v o = forall p. o p -> m (Maybe p, State (o p), State v)
+
+-- orchestrate :: Monad m
+--             => Graph v i o
+--             -> GraphState v i o
+--             -> [e]
+--             -> Receive m e
+--             -> Send m e
+--             -> m (GraphState v i o, [e])
+-- orchestrate = undefined
+
+-- Connectivity:
+-- TInput -> TOutput
+-- TInput -> Vertex
+-- TOutput -> Vertex
+--
+-- inverse:
+-- Vertex -> ([TInput], [TOutput])
+-- TOutput -> [TInput]
+
+-- type RTS = [Output]
+
+-- type ReceiveHandler m = forall p. TInput p -> Packet p -> m (InputState p, RTS)
+
+-- type SendHandler m = forall p. TOutput p -> m (Maybe (Packet p), OutputState p, RTS)
 
 -- data InputEvent where
 --     InputEvent :: TInput  p -> Packet p -> Event
@@ -105,22 +148,22 @@ send (AirOutput   s v) = return (Just "Hi", s ++ vLabel v, [])
 -- data OutputEvent where
 --     OutputEvent :: TInput  p -> Packet p -> Event
 
-data Event where
-    InputEvent  :: TInput  p -> Packet p -> Event
-    OutputEvent :: TOutput p -> Event
+-- data Event where
+--     InputEvent  :: TInput  p -> Packet p -> Event
+--     OutputEvent :: TOutput p -> Event
 
-type Topology = forall p. TOutput p -> [TInput p]
+-- type Topology = forall p. TOutput p -> [TInput p]
 
-handle :: Monad m => ReceiveHandler m -> SendHandler m -> Topology -> Event -> m [Event]
-handle r _ _ (InputEvent  i packet) = do _ <- r i packet
-                                         return []
-handle _ s t (OutputEvent o) = do (maybePacket, _, _) <- s o
-                                  return $ case maybePacket of
-                                      Nothing     -> []
-                                      Just packet -> [ InputEvent i packet | i <- t o ]
+-- handle :: Monad m => ReceiveHandler m -> SendHandler m -> Topology -> Event -> m [Event]
+-- handle r _ _ (InputEvent  i packet) = do _ <- r i packet
+--                                          return []
+-- handle _ s t (OutputEvent o) = do (maybePacket, _, _) <- s o
+--                                   return $ case maybePacket of
+--                                       Nothing     -> []
+--                                       Just packet -> [ InputEvent i packet | i <- t o ]
 
-data Edge where
-    Edge :: TOutput p -> [TInput p] -> Edge
+-- data Edge where
+--     Edge :: TOutput p -> [TInput p] -> Edge
 
 -- edges :: [Edge]
 -- edges = [ Edge nclCentral [1, 2, 3] kgxCross
@@ -134,15 +177,15 @@ data Edge where
 --     | n <= 0    = return ()
 --     | otherwise = orchestrate es (n - 1)
 
-data Graph = Graph
+data ExpandedGraph = ExpandedGraph
     { vertices :: [Vertex]
     , inputs   :: [Input]
     , outputs  :: [Output]
     , preset   :: Input  -> Output
     , postset  :: Output -> [Input] }
 
-buildGraph :: Ord Output => [Input] -> Graph
-buildGraph is = Graph vs is os pre post
+buildGraph :: Ord Output => [Input] -> ExpandedGraph
+buildGraph is = ExpandedGraph vs is os pre post
   where
     os   = map pre is
     vs   = map (\(Input  i) -> inputVertex i) is
@@ -151,23 +194,23 @@ buildGraph is = Graph vs is os pre post
     post o = Data.Map.findWithDefault [] o $ Data.Map.fromAscList dict
     dict = groupSort [ (pre i, i) | i <- is ]
 
-type EventPool = [Event]
+-- type EventPool = [Event]
 
-strategy :: EventPool -> Maybe (Event, EventPool)
-strategy = undefined
+-- strategy :: EventPool -> Maybe (Event, EventPool)
+-- strategy = undefined
 
-step :: Monad m => EventPool -> ReceiveHandler m -> SendHandler m -> Topology -> m (Maybe EventPool)
-step pool r s t = case strategy pool of
-    Nothing        -> return Nothing
-    Just (e, rest) -> do
-        new <- handle r s t e
-        return . Just $ rest ++ new
+-- step :: Monad m => EventPool -> ReceiveHandler m -> SendHandler m -> Topology -> m (Maybe EventPool)
+-- step pool r s t = case strategy pool of
+--     Nothing        -> return Nothing
+--     Just (e, rest) -> do
+--         new <- handle r s t e
+--         return . Just $ rest ++ new
 
--- Connectivity:
--- TInput -> TOutput
--- TInput -> Vertex
--- TOutput -> Vertex
---
--- inverse:
--- Vertex -> ([TInput], [TOutput])
--- TOutput -> [TInput]
+-- Pool of events.
+-- Oracle pulls events out of the pool one by one. The oracle terminates the
+-- computation by pulling out Nothing instead of an event.
+-- class Pool a where
+--     type PoolEvent a
+--     empty  :: a
+--     add    :: [PoolEvent a] -> a
+--     oracle :: a -> Maybe (a, p)
