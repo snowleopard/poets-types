@@ -1,0 +1,45 @@
+# Composing POETS messages
+
+In POETS, a _message_ travels along a graph edge from an output port of a vertex, where
+it is produced by a _send handler_, to an input port of a vertex, where it is consumed
+by a _receive handler_. When a message is consumed, the receive handler updates the state
+of the receiving port and vertex.
+
+Since message production and consumption can occur asynchronously and at different rates,
+one may need to introduce message queues for temporary storing arriving messages before
+they can be processed by the receive handlers. These queues may be costly both when
+implementing POETS engines in hardware and when simulating them in software.
+
+In this memo we discuss how one can remove the queues when messages can be composed
+in an _effect-preserving_ way, or using standard mathematical terminology, when messages
+form an _action monoid_ with respect to the receive handlers and port/vertex states.
+
+## Message action and composition
+
+Let _m_ : _M_ be a set of messages, and _S<sub>p</sub>_ and _S<sub>v</sub>_ be sets of
+port and vertex states, respectively. We introduce the operator ▷ as a concise
+mathematical notation for describing the effect of a message on a receiving port and
+vertex. Given a message _m_ : _M_ and a state _s_ : _S<sub>p</sub>_ × _S<sub>v</sub>_,
+we write _m_ ▷ _s_ to denote the new state of the port and vertex after receiving the 
+message. In other words, _m_ ▷ _s_ denotes the _action_ of message _m_ on state _s_.
+
+Using this notation, we can express the effect of two messages _a_ and _b_ on the receiving
+vertex as follows: _a_ ▷ _b_ ▷ _s_ (for convenience ▷ associates to the right). Note that 
+message _b_ arrives and acts first and messages do not necessarily commute, i.e. _a_ ▷ _b_ ▷ _s_
+and _b_ ▷ _a_ ▷ _s_ are not neccessarily the same.
+
+Now suppose that messages can be composed using the operator ◇ : M × M → M in such a way that
+_a_ ▷ _b_ ▷ _s_ = (_a_ ◇ _b_) ▷ _s_.
+In other words, instead of calling the receive handler twice on messages _a_ and _b_, one can
+instead first compose the messages into _m_ = _a_ ◇ _b_ and then call the receive handler on
+the resulting message _m_ only. This allows to replace a message queue with a single message
+slot and a message composition function.
+
+Indeed, let _e_ : _M_ stand for an _empty message_ that acts on the state as the identity
+transformation: _e_ ▷ _s_ = _s_.
+Then the receiving slot can be initialised to contain _e_ and whenever a new message _m_ arrives
+it can be composed with the slot contents _c_ using the ◇ operator: _c'_ = _m_ ◇ _c_.
+Whenever a receive handler is ready to consume the message, it removes _c_ from the slot
+replacing it with the empty message _e_, and uses _c_ to act on the current state: _c_ ▷ _s_.
+
+## Examples
