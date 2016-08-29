@@ -16,10 +16,10 @@ form a _monoid action_ with respect to the receive handlers and port/vertex stat
 
 ## Message action and composition
 
-Let _m_ : _M_ be a set of messages, and _S<sub>p</sub>_ and _S<sub>v</sub>_ be sets of
+Let _M_ be a set of messages, and _S<sub>p</sub>_ and _S<sub>v</sub>_ be sets of
 port and vertex states, respectively. We introduce the operator ▷ as a concise
 mathematical notation for describing the _action_ of a message on a receiving port and
-vertex. Given a message _m_ : _M_ and a state _s_ : _S<sub>p</sub>_ × _S<sub>v</sub>_,
+vertex. Given a message _m_ ∈ _M_ and a state _s_ ∈ _S<sub>p</sub>_ × _S<sub>v</sub>_,
 we write _m_ ▷ _s_ to denote the new state of the port and vertex after receiving the 
 message. In other words, _m_ ▷ _s_ denotes the action of message _m_ on state _s_.
 
@@ -38,7 +38,7 @@ instead first compose the messages into _m_ = _a_ ◇ _b_ and then call the rece
 the resulting message _m_ only. This allows to replace a message queue with a single message
 slot and a message composition function.
 
-Indeed, let _e_ : _M_ stand for an _empty message_ that acts on the state as the identity
+Indeed, let _e_ ∈ _M_ stand for an _empty message_ that acts on the state as the identity
 transformation: _e_ ▷ _s_ = _s_.
 Then the receiving slot can be initialised to contain _e_ and whenever a new message _m_ arrives
 it can be composed with the current slot contents _c_ using the ◇ operator: _c<sup>new</sup>_ = _m_ ◇ _c_.
@@ -47,8 +47,8 @@ replacing it with the empty message _e_, and uses _c_ to act on the current stat
 
 The structure described above appears in many applications and has been studied under the name
 of [monoid action](https://en.wikipedia.org/wiki/Semigroup_action), which is explained by the
-fact that a set of messages _M_ is a _monoid_ whenever it has an identity element _e_ and
-an associative composition operator ◇ such that _e_ ◇ _m_ = _m_ ◇ _e_ = _m_. 
+fact that a set of messages _M_ is a _monoid_ whenever it has an identity element _e_ ∈ _M_ and
+an associative composition operator ◇ : M × M → M such that _e_ ◇ _m_ = _m_ ◇ _e_ = _m_. 
 
 ## Examples
 
