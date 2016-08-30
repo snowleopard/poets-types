@@ -5,7 +5,7 @@ it is produced by a _send handler_, to an input port of a vertex, where it is co
 by a _receive handler_. When a message is consumed, the receive handler updates the state
 of the receiving port and vertex.
 
-Messages are produced, delivered and consumped asynchronously, hence one may need to
+Messages are produced, delivered and consumed asynchronously, hence one may need to
 introduce _message queues_ (also referred to as _buffers_ in hardware) as a temporary
 storage for messages as they travel along the interconnect. These queues may be costly
 both when implementing POETS engines in hardware and when simulating them in software.
