@@ -19,7 +19,7 @@ states.
 in order to reduce critical request-acknowledgement cycles between senders and receivers.
 It is therefore not clear at this stage whether any hardware savings will be possible
 with this technique. A further investigation/benchmarking is required. An alternative is
-to apply the optimisation at the software level when receving messages and dispatching them
+to apply the optimisation at the software level when receiving messages and dispatching them
 to individual handlers.
 
 ## Message action and composition
