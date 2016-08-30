@@ -5,14 +5,22 @@ it is produced by a _send handler_, to an input port of a vertex, where it is co
 by a _receive handler_. When a message is consumed, the receive handler updates the state
 of the receiving port and vertex.
 
-Since message production and consumption can occur asynchronously and at different rates,
-one may need to introduce message queues as a temporary storage for arriving messages before
-they can be processed by the receive handlers. These queues may be costly both when
-implementing POETS engines in hardware and when simulating them in software.
+Messages are produced, delivered and consumped asynchronously, hence one may need to
+introduce _message queues_ (also referred to as _buffers_ in hardware) as a temporary
+storage for messages as they travel along the interconnect. These queues may be costly
+both when implementing POETS engines in hardware and when simulating them in software.
 
-In this memo we discuss how one can remove the queues when messages can be composed
-in an _effect-preserving_ way, or using standard mathematical terminology, when messages
-form a _monoid action_ with respect to the receive handlers and port/vertex states.
+In this memo we discuss how one can remove or reduce the size of the queues when messages
+can be composed in an _effect-preserving_ way, or using standard mathematical terminology,
+when messages form a _monoid action_ with respect to the receive handlers and port/vertex
+states.
+
+**NB:** Message queues may be necessary when implementing high-performance interconnect
+in order to reduce critical request-acknowledgement cycles between senders and receivers.
+It is therefore not clear at this stage whether any hardware savings will be possible
+with this technique. A further investigation/benchmarking is required. An alternative is
+to apply the optimisation at the software level when receving messages and dispatching them
+to individual handlers.
 
 ## Message action and composition
 
