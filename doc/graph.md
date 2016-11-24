@@ -33,3 +33,22 @@ the handler computes the next state of the vertex.
 the handler computes the next state of the vertex and _may_ also return a message to be sent to another vertex.
 
 Note, a vertex can have several receive and send event handlers, one for each input and output port, respectively.
+
+## Vertex readiness to compute and send
+
+We typically assume that a vertex is always ready to receive an incoming message and the corresponding event
+handler can be invoked whenever a new message has arrived.
+
+The _readiness_ of compute and send handlers can be determined from the vertex state and properties using the
+following auxiliary functions: 
+
+* Ready-to-compute _rtc : S × P → Bool_ returns _True_ if the vertex requires computation resources to evolve its
+current state (e.g. to compute the payload for a new message to be sent). The compute handler should be called
+only when ready-to-compute is _True_.
+
+* Ready-to-send _rts : S × P → Bool_ returns _True_ to indicate that the vertex is ready to send a message at the
+earliest opportunity. The send handler should only be called when ready-to-send is _True_.
+
+Note: since a vertex can have multiple send handlers (one per output port), we can consider the following variants
+of the ready-to-send function: _rts : S × P × O → Bool_ (where _O_ is the output port) and _rts : S × P → Maybe O_.
+The latter either returns _Nothing_ if the vertex is not ready to send, or a specific port that is ready to send.
