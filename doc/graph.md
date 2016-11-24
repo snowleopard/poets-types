@@ -14,3 +14,22 @@ A graph is _well-formed_ if the following conditions are met:
 
 Each vertex has internal _state_ that can be changed atomically as a result of an _event_ occurrence.
 There are three types of events: _receive_, _compute_ and _send_ events.
+
+In addition to vertex state, each vertex is characterised by a few constant parameters, such as
+the vertex identification number and/or the vertex address, which we refer to as _properties_.
+
+## Event handlers
+
+An event occurrence can be described by a pure _handler_ function, whose type differs depending
+on the type of the event. 
+
+* Receive event handlers have type _Receive : S × P × M → S_, that is: given a vertex state, its properties
+and an incoming event, the handler computes the next state of the vertex.
+
+* Compute event handlers have type _Compute : S × P → S_, that is: given a vertex state and its properties,
+the handler computes the next state of the vertex.
+
+* Send event handlers have type _Send : S × P → S × Maybe M_, that is: given a vertex state and its properties,
+the handler computes the next state of the vertex and _may_ also return a message to be sent to another vertex.
+
+Note, a vertex can have several receive and send event handlers, one for each input and output port, respectively.
