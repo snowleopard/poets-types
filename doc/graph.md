@@ -59,7 +59,8 @@ In the interest of efficiency, the actual low-level event handlers written in C 
 but instead will be mutating vertex states and messages in place. Below we list prototypes of C functions that will act
 as low-level handlers.
 
-* Receive handler `void Receive(const M *message)` receives a message, mutates the vertex state, and can read its properties.
+* Receive handler `void Receive(const M *message)` receives a pointer to a constant message, mutates the vertex state,
+and can read its properties.
 * Compute handler `void Compute()` performs the computation, mutates the vertex state, and can read its properties.
 * Send handler `bool Send(M *message)` constructs a message to be sent at the given location (specified by the pointer).
 It can also mutate the vertex state and read its properties. The handler returns _True_ to indicate that the message has
