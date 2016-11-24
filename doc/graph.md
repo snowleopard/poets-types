@@ -10,3 +10,7 @@ A graph is _well-formed_ if the following conditions are met:
 * Every output port belongs to exactly one vertex.
 * Every edge connects an output port and an input port of matching message types.
 
+## Vertex state and events
+
+Each vertex has internal _state_ that can be changed atomically as a result of an _event_ occurrence.
+There are three types of events: _receive_, _compute_ and _send_ events.
